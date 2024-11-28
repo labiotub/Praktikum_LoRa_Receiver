@@ -1,15 +1,25 @@
+
+//Libraries for LoRa
 #include <SPI.h>
 #include <LoRa.h>
 
-//library oled
+//Libraries for OLED Display
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define SS      18   // GPIO18 -- SX1278's CS
-#define RST     14   // GPIO14 -- SX1278's RESET
-#define DI0     26   // GPIO26 -- SX1278's IRQ(Interrupt Request)
-#define BAND    915E6
+//define the pins used by the LoRa transceiver module
+#define SCK 5
+#define MISO 19
+#define MOSI 27
+#define SS 18
+#define RST 14
+#define DIO0 26
+
+//433E6 for Asia
+//866E6 for Europe
+//915E6 for North America
+#define BAND 915E6
 
 //OLED pins
 #define OLED_SDA 4
@@ -20,43 +30,18 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
-String rssi = "RSSI --";
-String packSize = "--";
-String packet ;
-int LoRaData;
+String LoRaData;
 
-void cbk(int packetSize) {
-  packet ="";
-  packSize = String(packetSize,DEC);
-  for (int i = 0; i < packetSize; i++) { packet += (int) LoRa.read(); }
-  rssi = "RSSI :" + String(LoRa.packetRssi(), DEC) ;
-  Serial.println(rssi); // Output RSSI to Serial monitor
-  Serial.println(packet);
-
-  // Dsiplay information
-   display.clearDisplay();
-   display.setCursor(30,0);
-   display.print("LORA RECEIVER");
-   display.setCursor(0,20);
-   display.print("Received packet:");
-   display.setCursor(0,30);
-   display.print(packet);
-   //display.setCursor(0,50);
-   //display.print("RSSI:");
-   display.setCursor(0,40);
-   display.print(rssi);
-   display.display();
-}
-
-void setup() {
+void setup() { 
+  //initialize Serial Monitor
   Serial.begin(115200);
-
+  
   //reset OLED display via software
   pinMode(OLED_RST, OUTPUT);
   digitalWrite(OLED_RST, LOW);
   delay(20);
   digitalWrite(OLED_RST, HIGH);
-
+  
   //initialize OLED
   Wire.begin(OLED_SDA, OLED_SCL);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
@@ -71,25 +56,57 @@ void setup() {
   display.print("LORA RECEIVER ");
   display.display();
 
-
-  while (!Serial);
-  Serial.println();
-  Serial.println("LoRa Receiver Callback");
+  Serial.println("LoRa Receiver Test");
   
-  SPI.begin();
-  LoRa.setPins(SS,RST,DI0);  
+  //SPI LoRa pins
+  SPI.begin(SCK, MISO, MOSI, SS);
+  //setup LoRa transceiver module
+  LoRa.setPins(SS, RST, DIO0);
+
   if (!LoRa.begin(BAND)) {
     Serial.println("Starting LoRa failed!");
     while (1);
   }
-  LoRa.receive();
-  LoRa.setSyncWord(0xF1);
-  Serial.println("init ok");
+  Serial.println("LoRa Initializing OK!");
+  display.setCursor(0,10);
+  display.println("LoRa Initializing OK!");
+  display.display();  
+
+  LoRa.setSyncWord(0xF1); // Add this line in the receiver setup if you're using a custom sync word
+
 }
 
 void loop() {
-  int packetSize = LoRa.parsePacket();
-  if (packetSize) { cbk(packetSize); }
 
-  delay(10);
+  //try to parse packet
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    //received a packet
+    Serial.print("Received packet ");
+
+    //read packet
+    while (LoRa.available()) {
+      LoRaData = LoRa.readString();
+      Serial.print(LoRaData);
+    }
+
+    //print RSSI of packet
+    int rssi = LoRa.packetRssi();
+    Serial.print(" with RSSI ");    
+    Serial.println(rssi);
+
+   // Dsiplay information
+   display.clearDisplay();
+   display.setCursor(0,0);
+   display.print("LORA RECEIVER");
+   display.setCursor(0,20);
+   display.print("Received packet:");
+   display.setCursor(0,30);
+   display.print(LoRaData);
+   display.setCursor(0,40);
+   display.print("RSSI:");
+   display.setCursor(30,40);
+   display.print(rssi);
+   display.display();   
+  }
 }
